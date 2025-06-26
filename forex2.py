@@ -143,24 +143,11 @@ def get_article_content_cloudscraper(url, scraper):
                     author_link = author_block.find_next('a')
                     if author_link:
                         author = author_link.get_text(strip=True)
-                
-                # Парсим время публикации и апдейта
-                published = None
-                updated = None
-                for span in soup.find_all('span'):
-                    if span.get_text(strip=True).lower() == 'published':
-                        next_span = span.find_next_sibling('span')
-                        if next_span:
-                            published = next_span.get_text(strip=True)
-                    if span.get_text(strip=True).lower() == 'updated':
-                        next_span = span.find_next_sibling('span')
-                        if next_span:
-                            updated = next_span.get_text(strip=True)
-                
-                return content, related, author, published, updated
+                # Возвращаем только нужные значения
+                return content, related, author
     except Exception as e:
         print(f"Ошибка при получении контента через cloudscraper: {str(e)}")
-    return None, [], None, None, None
+    return None, [], None
 
 def get_article_publish_datetime(article):
     try:
@@ -226,12 +213,16 @@ def main():
         for article in articles_to_process:
             try:
                 title_element = article.find('a', attrs={'data-test': 'article-title-link'})
+                publish_datetime = None
+                time_tag = article.find('time', attrs={'data-test': 'article-publish-date'})
+                if time_tag and time_tag.has_attr('datetime'):
+                    publish_datetime = time_tag['datetime']
                 if title_element:
                     title = title_element.text.strip()
                     link = title_element['href']
                     if not link.startswith('http'):
                         link = base_url + link
-                    content, related, author, published, updated = get_article_content_cloudscraper(link, scraper)
+                    content, related, author = get_article_content_cloudscraper(link, scraper)
                     if content:
                         results.append({
                             'title': title,
@@ -239,13 +230,12 @@ def main():
                             'content': content,
                             'related': related,
                             'author': author,
-                            'published': published,
-                            'updated': updated
+                            'publish_datetime': publish_datetime
                         })
                         # Сохраняем в CSV
                         csv_file = 'articles_forex.csv'
                         write_header = not os.path.exists(csv_file)
-                        csv_fields = ['title', 'link', 'content', 'related', 'author', 'published', 'updated']
+                        csv_fields = ['title', 'link', 'content', 'related', 'author', 'publish_datetime']
                         if write_header:
                             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                                 writer = csv.DictWriter(f, fieldnames=csv_fields)
@@ -258,8 +248,7 @@ def main():
                                 'content': clean_text(content),
                                 'related': clean_text('; '.join([f'{r["ticker"]} ({r["url"]})' for r in related])),
                                 'author': clean_text(author),
-                                'published': clean_text(published),
-                                'updated': clean_text(updated)
+                                'publish_datetime': publish_datetime
                             })
             except Exception:
                 continue
@@ -308,8 +297,7 @@ def main():
         for related in article['related']:
             print(f" - {related['ticker']} ({related['url']})")
         print(f"Автор: {article['author']}")
-        print(f"Опубликовано: {article['published']}")
-        print(f"Обновлено: {article['updated']}")
+        print(f"Дата публикации: {article['publish_datetime']}")
         print("-" * 80)
 
 if __name__ == "__main__":
